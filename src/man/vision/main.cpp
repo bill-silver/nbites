@@ -15,6 +15,7 @@
 #include "FastBlob.h"
 #include "Edge.h"
 #include "Hough.h"
+#include "spots.h"
 
 // ************
 // *          *
@@ -70,15 +71,27 @@ string CodeTimer::print(int pixelCount, bool noAsm)
 TestImage::TestImage()
 {
   // Allocate space for Yuv image. On the robot this comes from a camera.
-  uint8_t* src = (uint8_t*)
-    alignedAlloc(TestImage::width * TestImage::height * 8, 4, allocBlock);
-  source = YuvLite(TestImage::width, TestImage::height, TestImage::width * 4, src);
+  pixels = (uint8_t*)alignedAlloc(640 * 480 * 2, 4, allocBlock);
+  setRes(false);
   setRandom();
 }
 
 TestImage::~TestImage()
 {
   delete[] allocBlock;
+}
+
+void TestImage::setRes(bool half)
+{
+  int wd = 320;
+  int ht = 240;
+  if (half)
+  {
+    wd >>= 1;
+    ht >>= 1;
+  }
+  halfRes = half;
+  source = YuvLite(wd, ht, wd * 4, pixels);
 }
 
 string TestImage::read(const string& path)
@@ -110,6 +123,9 @@ string TestImage::read(const string& path)
     image.get(c);
     n = (n << 8) + (uint8_t)c;
   }
+
+  setRes(n < 640 * 480 * 2);
+  n = width() * height() * 8;
   for (int i = 0; i < n; ++i)
   {
     char c;
@@ -124,6 +140,7 @@ string TestImage::read(const string& path)
 
 void TestImage::synthetic(const FieldHomography& fh)
 {
+  setRes(false);
   syntheticField(source, fh);
   random = false;
 }
@@ -131,8 +148,11 @@ void TestImage::synthetic(const FieldHomography& fh)
 void TestImage::next()
 {
   if (random)
-    for (int i = 0; i < width * height * 8; ++i)
+  {
+    setRes(false);
+    for (int i = 0; i < width() * height() * 8; ++i)
       source.pixelAddr()[i] = (uint8_t)(rand() >> 7);
+  }
 }
 
 // This writes the output images for display by another program
@@ -145,18 +165,24 @@ void writeFile(const string& path, uint8_t* src, int count)
 }
 
 template <class T>
-void writeImage(const ImageLite<T>& image, ofstream& file)
+void writeImage(const ImageLite<T>& image, ofstream& file, bool writeHeader = false)
 {
+  if (writeHeader)
+  {
+    writeNumLE(file, image.width());
+    writeNumLE(file, image.height());
+  }
+
   for (int r = 0; r < image.height(); ++r)
     file.write((const char*)image.pixelAddr(0, r), image.width() * sizeof(T));
 }
 
 template <class T>
-void writeImage(const ImageLite<T>& image, const string& path)
+void writeImage(const ImageLite<T>& image, const string& path, bool writeHeader = false)
 {
   ofstream file;
   file.open(path, ios_base::binary);
-  writeImage(image, file);
+  writeImage(image, file, writeHeader);
   file.close();
 }
 
@@ -164,6 +190,12 @@ void writeNum(ofstream& f, uint32_t n)
 {
   for (int i = 3; i >= 0; --i)
     f.put((char)((n >> (8 * i)) & 0xFF));
+}
+
+void writeNumLE(ofstream& f, uint32_t n, int size = 4)
+{
+  for (int i = 0; i < size; ++i, n >>= 8)
+    f.put((char)(n & 0xFF));
 }
 
 void writeYuv(const YuvLite& image, const string& path)
@@ -195,9 +227,10 @@ static Colors colors;
 static ImageFrontEnd frontEnd;
 static EdgeDetector ed;
 static TestImage image;
-static HoughSpace hs(TestImage::width, TestImage::height);
+static HoughSpace hs(320, 240);
 static AdjustSet adjustSet;
 static FieldHomography fh;
+static SpotDetector spots;
 
 static int iterationCount = 1;
 static bool useColorTable = false;
@@ -205,7 +238,7 @@ static uint8_t* colorTable = 0;
 static bool fieldEdges = true;
 
 // window
-static int winX0 = 0, winY0 = 0, winWd = TestImage::width, winHt = TestImage::height;
+static int winX0 = 0, winY0 = 0, winWd = 320, winHt = 240;
 
 // *****************************
 // *                           *
@@ -231,6 +264,7 @@ int flushCache()
 void getSourceImage(ImageFrontEnd& ife = frontEnd)
 {
   YuvLite source(image.source, winX0, winY0, winWd, winHt);
+  fh.flen(image.getRes() ? 272 / 2 : 272);
   ife.run(source, &colors, useColorTable ? colorTable : 0);
 }
 
@@ -374,8 +408,11 @@ void gradientTest()
     for (int y = 0; y < ed.gradientImage().height(); ++y)
       for (int x = 0; x < ed.gradientImage().width(); ++x)
       {
-        magErrors += ed.mag(x, y) != slowEd.mag(x, y);
+        //magErrors += ed.mag(x, y) != slowEd.mag(x, y);
         dirErrors += ed.dir(x, y) != slowEd.dir(x, y);
+	// The above triggered an internal compiler error in VS2013
+	if (ed.dir(x, y) != slowEd.dir(x, y))
+	  ++dirErrors;
       }
   }
 
@@ -493,7 +530,7 @@ void houghTest()
     static bool noAsm[HoughSpace::NumTimes] = { true, true, false, false, true, false };
     for (int i = 0; i < HoughSpace::NumTimes; ++i)
       printf("\n%s:%s", HoughSpace::timeNames[i],
-             ct[i].print(TestImage::width * TestImage::height, noAsm[i]).c_str());
+             ct[i].print(image.width() * image.height(), noAsm[i]).c_str());
   }
 }
 
@@ -503,7 +540,7 @@ void houghTest()
 // *                                 *
 // ***********************************
 
-const char* testImagePath = "C:\\Users\\bill\\Documents\\life\\Bowdoin\\RoboCup\\Vision 2014\\FrontEnd\\test.xxx";
+const char* testImagePath = "C:\\Users\\bill\\Documents\\Bowdoin\\RoboCup\\Vision 2014\\FrontEnd\\test.xxx";
 
 void runColors()
 {
@@ -516,6 +553,8 @@ void runColors()
   writeImage(frontEnd. greenImage(), file);
   writeImage(frontEnd.orangeImage(), file);
   file.close();
+
+  printf("tilt = %.2f, f = %.2f, z = %.2f\n", fh.tilt() * 180 / M_PI, fh.flen(), fh.wz0());
 }
 
 void runGradient()
@@ -591,6 +630,28 @@ void runHough()
   writeImage(hSpace, f);
 
   f.close();
+}
+
+void runBall()
+{
+  getSourceImage();
+  spots.spotDetect(frontEnd.yImage(), fh, &frontEnd.greenImage());
+
+  ofstream file;
+  file.open(testImagePath, ios_base::binary);
+  writeNumLE(file, spots.ticks());
+  writeNumLE(file, spots.spots().size());
+  for (int i = 0; i < (int)spots.spots().size(); ++i)
+  {
+    Spot spot = spots.spots()[i];
+    writeNumLE(file, spot.x, 2);
+    writeNumLE(file, spot.y, 2);
+    file.put((char)spot.filterOutput);
+    file.put((char)spot.green);
+  }
+  writeNumLE(file, spots.filteredYOffset(frontEnd.yImage()));
+  writeImage(spots.filteredImage(), file, true);
+  file.close();
 }
 
 // ******************
@@ -793,8 +854,8 @@ int main(int argc, char* argv[])
         {
           winX0 = max(x0, 0);
           winY0 = max(y0, 0);
-          winWd = min(x0 + wd, TestImage::width) - winX0;
-          winHt = min(y0 + ht, TestImage::height) - winY0;
+          winWd = min(x0 + wd, image.width()) - winX0;
+          winHt = min(y0 + ht, image.height()) - winY0;
           ++argIndex;
         }
         else
@@ -837,6 +898,27 @@ int main(int argc, char* argv[])
 
       case 'rht':
         runHough();
+        break;
+
+      case 'ball':
+        int darkSpot, initialInnerDiam, initialOuterDiam, spotThr, greenThr;
+        float innerDiamCm, filterGain;
+        if (sscanf_s(argv[argIndex], "%d,%d,%d,%f,%d,%f,%d",
+                     &darkSpot, &initialInnerDiam, &initialOuterDiam, &innerDiamCm,
+                     &spotThr, &filterGain, &greenThr) == 7)
+        {
+          ++argIndex;
+          spots.darkSpot(darkSpot != 0);
+          spots.initialInnerDiam(initialInnerDiam);
+          spots.initialOuterDiam(initialOuterDiam);
+          spots.innerDiamCm(innerDiamCm);
+          spots.filterThreshold(spotThr);
+          spots.filterGain(filterGain);
+          spots.greenThreshold(greenThr);
+          runBall();
+        }
+        else
+          throw strPrintf("Bad ball parameters %s", argv[argIndex]); 
         break;
 
       case 'cal':

@@ -329,7 +329,7 @@ public:
   // bit to the right of the binary point). There are several reasons that a
   // half-pixel shift may occur:
   //    * The original source image (e.g. from a camera) may be of odd width
-  //      or height (unlikely, od course).
+  //      or height (unlikely, of course).
   //    * A neighborhood processing operation may use an odd-diameter neighborhood
   //    * Features (e.g. edges) can be detected with half-pixel resolution.
   int x0() const { return _x0; }
@@ -377,8 +377,27 @@ public:
   }
 
   // Construct a window of src
-  ImageLiteBase(const ImageLiteBase& src, int x0, int y0, int wd, int ht)
+  ImageLiteBase(const ImageLiteBase& src, int& x0, int& y0, int& wd, int& ht)
   {
+    if (x0 < 0)
+    {
+      wd += x0;
+      x0 = 0;
+    }
+    if (y0 < 0)
+    {
+      ht += y0;
+      y0 = 0;
+    }
+    wd = min(wd, src.width () - x0);
+    ht = min(ht, src.height() - y0);
+
+    if (wd <= 0 || ht <= 0)
+    {
+      _wd = _ht = 0;
+      return;
+    }
+
     _x0 = src.x0() - (x0 << 1);
     _y0 = src.y0() - (y0 << 1);
     _wd = wd;
