@@ -33,10 +33,10 @@ __columnMove16:
         push    edi
 
 # Fetch arguments
-        mov     eax, [esp + Args.posRow]
-        mov     ebx, [esp + Args.negRow]
-        mov     edi, [esp + Args.colSums]
-        mov     ecx, [esp + Args.words]
+        mov     eax, [esp + posRow]
+        mov     ebx, [esp + negRow]
+        mov     edi, [esp + colSums]
+        mov     ecx, [esp + words]
 
 # Make addresses point at end of rows
         lea     eax, [eax + ecx*2]

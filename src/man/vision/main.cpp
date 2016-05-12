@@ -641,14 +641,8 @@ void runBall()
   file.open(testImagePath, ios_base::binary);
   writeNumLE(file, spots.ticks());
   writeNumLE(file, spots.spots().size());
-  for (int i = 0; i < (int)spots.spots().size(); ++i)
-  {
-    Spot spot = spots.spots()[i];
-    writeNumLE(file, spot.x, 2);
-    writeNumLE(file, spot.y, 2);
-    file.put((char)spot.filterOutput);
-    file.put((char)spot.green);
-  }
+  for (SpotConstIterator i = spots.spots().begin(); i != spots.spots().end(); ++i)
+    file.write((const char*)&*i, sizeof(Spot));
   writeNumLE(file, spots.filteredYOffset(frontEnd.yImage()));
   writeImage(spots.filteredImage(), file, true);
   file.close();
@@ -901,16 +895,13 @@ int main(int argc, char* argv[])
         break;
 
       case 'ball':
-        int darkSpot, initialInnerDiam, initialOuterDiam, spotThr, greenThr;
+        int darkSpot, spotThr, greenThr;
         float innerDiamCm, filterGain;
-        if (sscanf_s(argv[argIndex], "%d,%d,%d,%f,%d,%f,%d",
-                     &darkSpot, &initialInnerDiam, &initialOuterDiam, &innerDiamCm,
-                     &spotThr, &filterGain, &greenThr) == 7)
+        if (sscanf_s(argv[argIndex], "%d,%f,%d,%f,%d",
+                     &darkSpot, &innerDiamCm, &spotThr, &filterGain, &greenThr) == 5)
         {
           ++argIndex;
           spots.darkSpot(darkSpot != 0);
-          spots.initialInnerDiam(initialInnerDiam);
-          spots.initialOuterDiam(initialOuterDiam);
           spots.innerDiamCm(innerDiamCm);
           spots.filterThreshold(spotThr);
           spots.filterGain(filterGain);

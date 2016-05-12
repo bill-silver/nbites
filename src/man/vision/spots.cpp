@@ -75,6 +75,7 @@ void SpotDetector::spotDetect(int y0, const ImageLiteU8* green)
   int p = filteredImage().pitch();
   int spotThreshold = (int)(filterThreshold() * filterGain()) - 1;
 
+  // Scan filtered image, look for peaks, reject those too green
   for (int y = 1; y < filteredImage().height() - 1; ++y)
   {
     uint8_t* row = filteredImage().pixelAddr(0, y);
@@ -89,7 +90,7 @@ void SpotDetector::spotDetect(int y0, const ImageLiteU8* green)
       if (z >= c[1] && z > c[-1] && z >= c[p] && z > c[-p] &&
           z >= c[p + 1] && z > c[-1 - p] && z >= c[p - 1] && z > c[1 - p])
       {
-        int score = 0;
+        int greenScore = 0;
         if (green)
         {
           int diam = row[1];
@@ -103,11 +104,52 @@ void SpotDetector::spotDetect(int y0, const ImageLiteU8* green)
           }
           if (greenSum >= greenThreshold() * diam * diam)
             continue;
-          score = greenSum / (diam * diam);
+          greenScore = greenSum / (diam * diam);
         }
-        _spots.push_back(Spot(x, y + y0, z, score));
+        Spot spot;
+        spot.x = x;
+        spot.y = y + y0;
+        spot.filterOutput = z;
+        spot.green = greenScore;
+        spot.outerDiam = row[0];
+        spot.innerDiam = row[1];
+        spots().push_back(spot);
       }
     }
+  }
+
+  // Reject weaker overlapping peaks
+  if (spots().size() >= 2)
+  {
+    SpotIterator last = spots().end();
+    --last;
+    for (SpotIterator i = spots().begin(); i != last; ++i)
+    {
+      int xLo = i->xLo() - 1;
+      int xHi = i->xHi() + 1;
+      int yLo = i->yLo() - 1;
+      int yHi = i->yHi() + 1;
+      SpotIterator next = i;
+      ++next;
+      for (SpotIterator j = next; j != spots().end(); ++j)
+      {
+        if (j->yLo() > yHi)
+          break;
+
+        if (xLo > j->xHi() || xHi < j->xLo())
+          continue;
+
+        if (i->filterOutput > j->filterOutput)
+          j->outerDiam = 0;
+        else
+          i->outerDiam = 0;
+      }
+    }
+    for (SpotIterator i = spots().begin(); i != spots().end();)
+      if (i->outerDiam == 0)
+        i = spots().erase(i);
+      else
+        ++i;
   }
 }
 

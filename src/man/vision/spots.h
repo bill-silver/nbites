@@ -12,7 +12,7 @@
 #include "FrontEnd.h"
 #include "Homography.h"
 
-#include <vector>
+#include <list>
 
 namespace man {
 namespace vision {
@@ -33,13 +33,17 @@ struct Spot
   int filterOutput;   // Filter output, [0 .. 255]
   int green;          // Average green confidence in inner region
   int x, y;           // Source image coordinates of spot
+  int innerDiam, outerDiam;
 
-  Spot() : filterOutput(0) {}
-
-  Spot(int x, int y, int z, int g)
-    : x(x), y(y), filterOutput(z), green(g)
-  {}
+  int xLo() const { return x - (innerDiam >> 1); }
+  int xHi() const { return x + ((innerDiam - 1) >> 1); }
+  int yLo() const { return y - (innerDiam >> 1); }
+  int yHi() const { return y + ((innerDiam - 1) >> 1); }
 };
+
+typedef std::list<Spot> SpotList;
+typedef std::list<Spot>::iterator SpotIterator;
+typedef std::list<Spot>::const_iterator SpotConstIterator;
 
 // *******************
 // *                 *
@@ -83,7 +87,7 @@ class SpotDetector
   void spotDetect(int y0, const ImageLiteU8* green);
 
   // Vector of all spots found
-  std::vector<Spot> _spots;
+  std::list<Spot> _spots;
 
 public:
   SpotDetector();
@@ -151,7 +155,7 @@ public:
   // for the initial diameters and the grow amounts. Then run the spot filter
   // on a window of the specified source image within which the spot can be
   // resolved by the initial inner diameter. Then process the filtered image
-  // to detect spots and put them in a vector that can be fetched by the
+  // to detect spots and put them in a list that can be fetched by the
   // spots member function. If a green image is specified, reject green spots.
   template <class T>
   void spotDetect(ImageLite<T>& src, const FieldHomography& h, const ImageLiteU8* green = NULL);
@@ -168,7 +172,8 @@ public:
   }
 
   // Get the detected spots
-  const std::vector<Spot>& spots() const { return _spots; }
+  const std::list<Spot>& spots() const { return _spots; }
+        std::list<Spot>& spots()       { return _spots; }
 
   // Get the execution time of the last call to spotDetect
   uint32_t ticks() const { return _ticks; }
