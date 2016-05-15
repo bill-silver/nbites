@@ -69,7 +69,7 @@ void SpotDetector::alloc(const ImageLiteBase& src)
                                src.width(), maxHeightNeeded, pitchNeeded, filteredPixels);
 }
 
-void SpotDetector::spotDetect(int y0, const ImageLiteU8* green)
+void SpotDetector::spotDetect(const ImageLiteU8* green)
 {
   _spots.clear();
   int p = filteredImage().pitch();
@@ -94,21 +94,22 @@ void SpotDetector::spotDetect(int y0, const ImageLiteU8* green)
         if (green)
         {
           int diam = row[1];
-          int org = diam >> 1;
+          int greenX0 = (green->x0() - filteredImage().x0() - diam + 1) >> 1;
+          int greenY0 = (green->y0() - filteredImage().y0() - diam + 1) >> 1;
           int greenSum = 0;
           for (int gy = 0; gy < diam; ++gy)
           {
-            const uint8_t* gp = green->pixelAddr(x - org, y + y0 + gy - org);
+            const uint8_t* gp = green->pixelAddr(x + greenX0, y + greenY0 + gy);
             for (int gx = 0; gx < diam; ++gx)
               greenSum += *gp++;
           }
-          if (greenSum >= greenThreshold() * diam * diam)
+          if (greenSum > greenThreshold() * diam * diam)
             continue;
           greenScore = greenSum / (diam * diam);
         }
         Spot spot;
-        spot.x = x;
-        spot.y = y + y0;
+        spot.x = (x << 1) - filteredImage().x0();
+        spot.y = filteredImage().y0() - (y << 1);
         spot.filterOutput = z;
         spot.green = greenScore;
         spot.outerDiam = row[0];
@@ -133,7 +134,7 @@ void SpotDetector::spotDetect(int y0, const ImageLiteU8* green)
       ++next;
       for (SpotIterator j = next; j != spots().end(); ++j)
       {
-        if (j->yLo() > yHi)
+        if (j->yHi() < yLo)
           break;
 
         if (xLo > j->xHi() || xHi < j->xLo())

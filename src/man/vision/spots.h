@@ -32,13 +32,17 @@ struct Spot
 {
   int filterOutput;   // Filter output, [0 .. 255]
   int green;          // Average green confidence in inner region
-  int x, y;           // Source image coordinates of spot
+  int x, y;           // Image coordinates of spot wrt optical axis (s32.1)
   int innerDiam, outerDiam;
 
-  int xLo() const { return x - (innerDiam >> 1); }
-  int xHi() const { return x + ((innerDiam - 1) >> 1); }
-  int yLo() const { return y - (innerDiam >> 1); }
-  int yHi() const { return y + ((innerDiam - 1) >> 1); }
+  // Image coordinates of spot relative to optical axis
+  float ix() const { return 0.5f * x; }
+  float iy() const { return 0.5f * y; }
+
+  int xLo() const { return (x - innerDiam + 1) >> 1; }
+  int xHi() const { return (x + innerDiam - 1) >> 1; }
+  int yLo() const { return (y - innerDiam + 1) >> 1; }
+  int yHi() const { return (y + innerDiam - 1) >> 1; }
 };
 
 typedef std::list<Spot> SpotList;
@@ -84,10 +88,12 @@ class SpotDetector
 
   // Find spots in filteredImage by peak detection, rejecting green spots if
   // green image is supplied.
-  void spotDetect(int y0, const ImageLiteU8* green);
+  void spotDetect(const ImageLiteU8* green);
 
   // Vector of all spots found
   std::list<Spot> _spots;
+
+  int _horizon;
 
 public:
   SpotDetector();
@@ -164,16 +170,12 @@ public:
   // calls it).
   const ImageLiteU8& filteredImage() const { return _filteredImage; }
 
-  // Get the row offset from filteredImage to the specified source image
-  // (e.g. the one that spotDetect was called on).
-  int filteredYOffset(const ImageLiteBase& src) const
-  {
-    return (src.y0() - filteredImage().y0()) >> 1;
-  }
-
   // Get the detected spots
   const std::list<Spot>& spots() const { return _spots; }
         std::list<Spot>& spots()       { return _spots; }
+
+  // Get horizon used by spotDetect (source image y coordinate)
+  int horizon() const { return _horizon; }
 
   // Get the execution time of the last call to spotDetect
   uint32_t ticks() const { return _ticks; }
@@ -291,7 +293,7 @@ void SpotDetector::spotFilter(ImageLite<T>& src)
       innerGrowTrigger -= 1.f;
     }
 
-    if (outerGrowTrigger <= 0)
+    if (outerGrowTrigger <= 0 && y < src.height() - 1)
     {
       // Grow outer region by 2
       T* pos0 = src.pixelAddr(0, y);
@@ -369,11 +371,11 @@ void SpotDetector::spotDetect(ImageLite<T>& src, const FieldHomography& h, const
   innerGrowRows((float)(2 * h.wz0() / (innerDiamCm() * st)));
   outerGrowRows(0.60f * innerGrowRows());
 
-  int y0;
-  if (0.5 * src.y0() - h.flen() * ct / st < 0)
+  double hy = 0.5 * src.y0() - h.flen() * ct / st;
+  _horizon = (int)round(hy);
+  if (hy < 0)
   {
     // Horizon above image
-    y0 = 0;
     int id = max((int)round((h.flen() * ct - 0.5 * src.y0() * st) * innerDiamCm() / h.wz0()), 3);
     int od = 5 * id / 3;    // Roughly balance inner and outer sizes
     od += (id ^ od) & 1;
@@ -386,13 +388,12 @@ void SpotDetector::spotDetect(ImageLite<T>& src, const FieldHomography& h, const
     // Horizon within image
     initialInnerDiam(3);
     initialOuterDiam(5);
-    y0 = (int)round(0.5 * src.y0() - (ct * h.flen() - initialInnerDiam() * h.wz0() / innerDiamCm()) / st);
+    int y0 = (int)round(0.5 * src.y0() - (ct * h.flen() - initialInnerDiam() * h.wz0() / innerDiamCm()) / st);
     y0 = max(y0 - (initialOuterDiam() >> 1), 0);
     spotFilter(ImageLite<T>(src, 0, y0, src.width(), src.height() - y0));
   }
 
-  y0 += initialOuterDiam() >> 1;
-  spotDetect(y0, green);
+  spotDetect(green);
 
   _ticks = timer.time32();
 }

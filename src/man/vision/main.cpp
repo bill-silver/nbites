@@ -643,7 +643,9 @@ void runBall()
   writeNumLE(file, spots.spots().size());
   for (SpotConstIterator i = spots.spots().begin(); i != spots.spots().end(); ++i)
     file.write((const char*)&*i, sizeof(Spot));
-  writeNumLE(file, spots.filteredYOffset(frontEnd.yImage()));
+  writeNumLE(file, spots.horizon());
+  writeNumLE(file, spots.filteredImage().x0());
+  writeNumLE(file, spots.filteredImage().y0());
   writeImage(spots.filteredImage(), file, true);
   file.close();
 }
