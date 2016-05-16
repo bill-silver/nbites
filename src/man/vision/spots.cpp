@@ -57,7 +57,7 @@ void SpotDetector::alloc(const ImageLiteBase& src)
     rowAlignMask = (1 << rowAlignBits) - 1
   };
   int pitchNeeded = (src.width() + rowAlignMask) & ~rowAlignMask;
-  int maxHeightNeeded = src.height() - initialOuterDiam() + 1;
+  int maxHeightNeeded = src.height() - initialOuterDiam() + 2;  // one extra for peak detect
   size_t sizeNeeded = pitchNeeded * maxHeightNeeded;
   if (sizeNeeded > filteredSize)
   {
@@ -76,11 +76,11 @@ void SpotDetector::spotDetect(const ImageLiteU8* green)
   int spotThreshold = (int)(filterThreshold() * filterGain()) - 1;
 
   // Scan filtered image, look for peaks, reject those too green
-  for (int y = 1; y < filteredImage().height() - 1; ++y)
+  for (int y = 1; y < filteredImage().height(); ++y)
   {
     uint8_t* row = filteredImage().pixelAddr(0, y);
-    int x0 = row[0] >> 1;
-    _runLengthU8(row + x0, filteredImage().width() - row[0], spotThreshold, outerColumns);
+    int x0 = (row[0] >> 1);
+    _runLengthU8(row + x0, filteredImage().width() - row[0] + 1, spotThreshold, outerColumns);
 
     for (int i = 0; outerColumns[i] >= 0; ++i)
     {

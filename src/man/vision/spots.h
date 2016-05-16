@@ -27,7 +27,15 @@ namespace vision {
 // is above a threshold and a local maximum. Optionally, when looking for
 // balls, spots are rejected where the average green confidence is below a
 // threshold, since the ball is white and its spots are black and neither
-// is green. 
+// is green.
+// 
+// The integer spot coordinates have one bit to the right of the binary
+// point (s32.1). There is a half-pixel shift in the filtered image, and
+// hence the spots, when the filter diameters are even. The extra bit allows
+// that to be captured. Spot coordinates are relative to the optical axis stored
+// in all ImageLite<T>, which is also s32.1. Windows of images correctly
+// keep track of the optical axis, so that spot coordinates will be the
+// same if the spot detector is run on a window.
 struct Spot
 {
   int filterOutput;   // Filter output, [0 .. 255]
@@ -39,6 +47,10 @@ struct Spot
   float ix() const { return 0.5f * x; }
   float iy() const { return 0.5f * y; }
 
+  // These are intended for the overlap detection code. Note that the
+  // quantities being shifted right will always be even, because
+  // the (x, y) coordinates are off when innerDiam is even (half-
+  // pixel shift).
   int xLo() const { return (x - innerDiam + 1) >> 1; }
   int xHi() const { return (x + innerDiam - 1) >> 1; }
   int yLo() const { return (y - innerDiam + 1) >> 1; }
@@ -174,7 +186,10 @@ public:
   const std::list<Spot>& spots() const { return _spots; }
         std::list<Spot>& spots()       { return _spots; }
 
-  // Get horizon used by spotDetect (source image y coordinate)
+  // Get horizon used by spotDetect (source image y coordinate). This is not the
+  // true horizon because roll is ignored. This is primarily intended for display
+  // so users can see what was done. Roll is ignored because the spot growing
+  // can happen efficiently only in y.
   int horizon() const { return _horizon; }
 
   // Get the execution time of the last call to spotDetect
@@ -349,8 +364,14 @@ void SpotDetector::spotFilter(ImageLite<T>& src)
       outerSum += outerColumns[x] - outerColumns[x - outerDiam];
       innerSum += innerColumns[x - innerOffset] - innerColumns[x - innerOffset - innerDiam];
     }
-    *pDst = (uint8_t)min(max((int)(innerK * innerSum - outerK * outerSum), 0), 255);
+    *pDst++ = (uint8_t)min(max((int)(innerK * innerSum - outerK * outerSum), 0), 255);
+    *pDst = 0;    // for peak detect
   }
+
+  // Write extra row of 0's for peak detect
+  uint8_t* pDst = _filteredImage.pixelAddr(outerDiam >> 1, yFilt);
+  for (int x = 0; x < src.width() - outerDiam; ++x)
+    pDst[x] = 0;
 
   _filteredImage = ImageLiteU8(_filteredImage, 0, 0, _filteredImage.width(), yFilt);
 }
