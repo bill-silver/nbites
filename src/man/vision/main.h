@@ -74,21 +74,23 @@ public:
 class TestImage
 {
   void* allocBlock;
+  uint8_t* pixels;
 
   bool random;
+  bool halfRes;   // bottom camera is half res
 
 public:
-  enum
-  {
-    width = 320,
-    height = 240,
-  };
-
   string path;
   YuvLite source;
 
   TestImage();
   ~TestImage();
+
+  int width () const { return source.width (); }
+  int height() const { return source.height(); }
+
+  void setRes(bool half);
+  bool getRes() const { return halfRes; }
 
   string read(const string& path);
 
