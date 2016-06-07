@@ -16,7 +16,7 @@
 
 namespace man {
 namespace vision {
-
+// test change
 // ********************
 // *                  *
 // *  Spot Structure  *
