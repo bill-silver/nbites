@@ -43,9 +43,9 @@ struct Spot
   int x, y;           // Image coordinates of spot wrt optical axis (s32.1)
   int innerDiam, outerDiam;
 
-  // Image coordinates of spot relative to optical axis
-  float ix() const { return 0.5f * x; }
-  float iy() const { return 0.5f * y; }
+  // Image coordinates of spot relative to optical axis, +y is up
+  float ix() const { return  0.5f * x; }
+  float iy() const { return -0.5f * y; }
 
   // These are intended for the overlap detection code. Note that the
   // quantities being shifted right will always be even, because
@@ -167,7 +167,7 @@ public:
   // can be obtained with the filteredImage member function.
   // The template type T must be an integer type of no more than 32 bits
   template <class T>
-  void spotFilter(ImageLite<T>& src);
+  void spotFilter(const ImageLite<T>& src);
 
   // Using the specified homography and innerDiamCm, compute reasonable values
   // for the initial diameters and the grow amounts. Then run the spot filter
@@ -176,7 +176,7 @@ public:
   // to detect spots and put them in a list that can be fetched by the
   // spots member function. If a green image is specified, reject green spots.
   template <class T>
-  void spotDetect(ImageLite<T>& src, const FieldHomography& h, const ImageLiteU8* green = NULL);
+  void spotDetect(const ImageLite<T>& src, const FieldHomography& h, const ImageLiteU8* green = NULL);
 
   // Get the filtered image from the last run of spotFilter (and spotDetect, which
   // calls it).
@@ -236,7 +236,7 @@ inline void columnMove<uint16_t>(const uint16_t* posRow, const uint16_t* negRow,
 // ***********************************
 
 template <class T>
-void SpotDetector::spotFilter(ImageLite<T>& src)
+void SpotDetector::spotFilter(const ImageLite<T>& src)
 {
   alloc(src);
 
@@ -383,8 +383,11 @@ void SpotDetector::spotFilter(ImageLite<T>& src)
 // *************************************
 
 template <class T>
-void SpotDetector::spotDetect(ImageLite<T>& src, const FieldHomography& h, const ImageLiteU8* green)
+void SpotDetector::spotDetect(const ImageLite<T>& src, const FieldHomography& h, const ImageLiteU8* green)
 {
+  // Don't time this, since it will generally only do the allocation once
+  alloc(src);
+
   TickTimer timer;
 
   double ct = cos(h.tilt());

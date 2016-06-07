@@ -28,7 +28,7 @@ SpotDetector::SpotDetector()
   innerDiamCm(3.f);
   innerGrowRows(50.f);
   outerGrowRows(30.f);
-  filterGain(2.f);
+  filterGain(0.5f);
   filterThreshold(40);
   greenThreshold(64);
 }
@@ -109,7 +109,7 @@ void SpotDetector::spotDetect(const ImageLiteU8* green)
         }
         Spot spot;
         spot.x = (x << 1) - filteredImage().x0();
-        spot.y = filteredImage().y0() - (y << 1);
+        spot.y = (y << 1) - filteredImage().y0();
         spot.filterOutput = z;
         spot.green = greenScore;
         spot.outerDiam = row[0];
@@ -119,7 +119,8 @@ void SpotDetector::spotDetect(const ImageLiteU8* green)
     }
   }
 
-  // Reject weaker overlapping peaks
+  // Reject weaker overlapping peaks. This is technically O(n^2), but we take
+  // advantage of the natural sorting of the list to keep it fast.
   if (spots().size() >= 2)
   {
     SpotIterator last = spots().end();
@@ -134,7 +135,7 @@ void SpotDetector::spotDetect(const ImageLiteU8* green)
       ++next;
       for (SpotIterator j = next; j != spots().end(); ++j)
       {
-        if (j->yHi() < yLo)
+        if (j->yLo() > yHi)
           break;
 
         if (xLo > j->xHi() || xHi < j->xLo())
