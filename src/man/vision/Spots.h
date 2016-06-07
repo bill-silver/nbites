@@ -28,7 +28,7 @@ namespace vision {
 // balls, spots are rejected where the average green confidence is below a
 // threshold, since the ball is white and its spots are black and neither
 // is green.
-//
+// 
 // The integer spot coordinates have one bit to the right of the binary
 // point (s32.1). There is a half-pixel shift in the filtered image, and
 // hence the spots, when the filter diameters are even. The extra bit allows
@@ -42,8 +42,6 @@ struct Spot
   int green;          // Average green confidence in inner region
   int x, y;           // Image coordinates of spot wrt optical axis (s32.1)
   int innerDiam, outerDiam;
-  int spotType;       // Used for displaying debugging information
-  int rawX, rawY;     // Raw coordinate value of center - used for display
 
   // Image coordinates of spot relative to optical axis, +y is up
   float ix() const { return  0.5f * x; }
@@ -218,7 +216,7 @@ inline void columnMove(const T* posRow, const T* negRow, int* columnSums, int co
     columnSums[x] += posRow[x] - negRow[x];
 }
 
-#define FAST_SPOT 0
+#define FAST_SPOT 1
 
 #if FAST_SPOT
 extern "C" void

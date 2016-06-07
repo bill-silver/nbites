@@ -6,7 +6,7 @@
 
 
 #include "Stdafx.h"
-#include "Spots.h"
+#include "spots.h"
 
 #include <stdlib.h>
 
